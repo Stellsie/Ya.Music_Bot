@@ -26,11 +26,11 @@ def print_track_list(t_list):
             index += 1
         elif type(t_list[index]) == yandex_music.TrackShort:
             message += str(index + 1) + ': ' + t_list[index].track.title + ' - ' \
-                       + get_artists(t_list[index].track.title) + '\n'
+                       + get_artists(t_list[index].track) + '\n'
             index += 1
         elif type(t_list[index]) == yandex_music.BlockEntity:
             message += str(index + 1) + ': ' + t_list[index].data.track.title + ' - ' \
-                       + get_artists(t_list[index].data.track.title) + '\n'
+                       + get_artists(t_list[index].data.track) + '\n'
             index += 1
     if items_count > 10:
         message += 'И еще {} треков'.format((items_count - 10))
@@ -161,8 +161,8 @@ class Music(commands.Cog):
                 await ctx.send('Плейлист "{}" добавлен в очередь'.format(result.title))
                 tracks_queue.put(client.usersPlaylists(kind=result.kind, user_id=result.owner.uid)[0].tracks)
             elif type(result) == yandex_music.Artist:
-                await ctx.send('Популярные треки исполнителя {} добавлены в очередь'.format(result.name))
-                tracks_queue.put(result.popular_tracks)
+                await ctx.send('10 популярных треков исполнителя {} добавлены в очередь'.format(result.name))
+                tracks_queue.put(result.get_tracks(page_size=10).tracks)
             elif type(result) == yandex_music.Block:
                 await ctx.send('В очередь добавлены 10 первых треков чарта')
                 tracks_queue.put(result.entities)
