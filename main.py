@@ -49,7 +49,7 @@ def search_for(ctx, query):
             else:
                 ctx.send('В запросе найдено больше одного типа, используется первый найденный')
                 q.replace(i, '')
-    if q_keyword == 'чарт' or 'chart':
+    if q_keyword == 'чарт' or q_keyword == 'chart':
         return client.landing(blocks='chart')
     elif q_keyword == 'track':
         return client.search(text=q, type_=q_keyword).tracks.results
@@ -75,10 +75,10 @@ class TracksQueue:
 
     def get(self):
         item = self.queue.pop(0)
-        if type(item) == yandex_music.TrackShort:
-            return item.track
-        elif type(item) == yandex_music.Track:
+        if type(item) == yandex_music.Track:
             return item
+        elif type(item) == yandex_music.TrackShort:
+            return item.track
         elif type(item) == yandex_music.BlockEntity:
             return item.data.track
         else:
@@ -95,7 +95,7 @@ class TracksQueue:
             message = 'Очередь пуста'
         else:
             message = 'Сейчас в очереди: \n'
-            print_track_list(self.queue)
+            message += print_track_list(self.queue)
         return message
 
 
