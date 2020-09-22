@@ -26,7 +26,11 @@ def print_track_list(t_list):
             index += 1
         elif type(t_list[index]) == yandex_music.TrackShort:
             message += str(index + 1) + ': ' + t_list[index].track.title + ' - ' \
-                       + get_artists(t_list[index].track) + '\n'
+                       + get_artists(t_list[index].track.title) + '\n'
+            index += 1
+        elif type(t_list[index]) == yandex_music.BlockEntity:
+            message += str(index + 1) + ': ' + t_list[index].data.track.title + ' - ' \
+                       + get_artists(t_list[index].data.track.title) + '\n'
             index += 1
     if items_count > 10:
         message += 'И еще {} треков'.format((items_count - 10))
@@ -35,30 +39,31 @@ def print_track_list(t_list):
 
 def search_for(ctx, query):
     q = str(query)
-    q_types = ['track', 'album', 'artist', 'playlist']
-    q_type = None
-    for i in q_types:
+    q_keywords = ['track', 'album', 'artist', 'playlist', 'чарт', 'chart']
+    q_keyword = None
+    for i in q_keywords:
         if q.find(i) != -1:
-            if q_type is None:
-                q_type = i
+            if q_keyword is None:
+                q_keyword = i
                 q.replace(i, '')
             else:
                 ctx.send('В запросе найдено больше одного типа, используется первый найденный')
                 q.replace(i, '')
-    if q_type == 'track':
-        result = client.search(text=q, type_=q_type).tracks.results
-    elif q_type == 'album':
-        result = client.search(text=q, type_=q_type).albums.results
-    elif q_type == 'artist':
-        result = client.search(text=q, type_=q_type).artists.results
-    elif q_type == 'playlist':
-        result = client.search(text=q, type_=q_type).playlists.results
+    if q_keyword == 'чарт' or 'chart':
+        return client.landing(blocks='chart')
+    elif q_keyword == 'track':
+        return client.search(text=q, type_=q_keyword).tracks.results
+    elif q_keyword == 'album':
+        return client.search(text=q, type_=q_keyword).albums.results
+    elif q_keyword == 'artist':
+        return client.search(text=q, type_=q_keyword).artists.results
+    elif q_keyword == 'playlist':
+        return client.search(text=q, type_=q_keyword).playlists.results
     # not working now :(
-    # elif q_type == 'podcasts':
-    #     result = client.search(text=q, type_=q_type).podcasts
+    # elif q_keyword == 'podcasts':
+    #     return client.search(text=q, type_=q_keyword).podcasts
     else:  # if query type not specified, searching tracks
-        result = client.search(text=q, type_='track').tracks.results
-    return result
+        return client.search(text=q, type_='track').tracks.results
 
 
 class TracksQueue:
@@ -74,6 +79,8 @@ class TracksQueue:
             return item.track
         elif type(item) == yandex_music.Track:
             return item
+        elif type(item) == yandex_music.BlockEntity:
+            return item.data.track
         else:
             return None
 
@@ -154,8 +161,11 @@ class Music(commands.Cog):
                 await ctx.send('Плейлист "{}" добавлен в очередь'.format(result.title))
                 tracks_queue.put(client.usersPlaylists(kind=result.kind, user_id=result.owner.uid)[0].tracks)
             elif type(result) == yandex_music.Artist:
-                await ctx.send('10 популярных треков исполнителя {} добавлены в очередь'.format(result.name))
-                tracks_queue.put(result.getTracks().tracks[:10])
+                await ctx.send('Популярные треки исполнителя {} добавлены в очередь'.format(result.name))
+                tracks_queue.put(result.popular_tracks)
+            elif type(result) == yandex_music.Block:
+                await ctx.send('В очередь добавлены 10 первых треков чарта')
+                tracks_queue.put(result.entities)
         while ctx.voice_client.is_playing():
             await asyncio.sleep(1)
 
