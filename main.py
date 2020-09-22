@@ -15,6 +15,24 @@ cfg = configparser.ConfigParser()
 cfg.read('config.ini')
 
 
+def print_track_list(t_list):
+    message = ''
+    index = 0
+    items_count = len(t_list)
+    while index < 10 and index < items_count:
+        if type(t_list[index]) == yandex_music.Track:
+            message += str(index + 1) + ': ' + t_list[index].title + ' - ' \
+                       + get_artists(t_list[index]) + '\n'
+            index += 1
+        elif type(t_list[index]) == yandex_music.TrackShort:
+            message += str(index + 1) + ': ' + t_list[index].track.title + ' - ' \
+                       + get_artists(t_list[index].track) + '\n'
+            index += 1
+    if items_count > 10:
+        message += 'И еще {} треков'.format((items_count - 10))
+    return message
+
+
 def search_for(ctx, query):
     q = str(query)
     q_types = ['track', 'album', 'artist', 'playlist']
@@ -70,19 +88,7 @@ class TracksQueue:
             message = 'Очередь пуста'
         else:
             message = 'Сейчас в очереди: \n'
-            index = 0
-            items_count = len(self.queue)
-            while index < 10 and index < items_count:
-                if type(self.queue[index]) == yandex_music.Track:
-                    message += str(index + 1) + ': ' + self.queue[index].title + ' - ' \
-                               + get_artists(self.queue[index]) + '\n'
-                    index += 1
-                elif type(self.queue[index]) == yandex_music.TrackShort:
-                    message += str(index + 1) + ': ' + self.queue[index].track.title + ' - ' \
-                               + get_artists(self.queue[index].track) + '\n'
-                    index += 1
-            if items_count > 10:
-                message += 'И еще {} треков'.format((items_count - 10))
+            print_track_list(self.queue)
         return message
 
 
