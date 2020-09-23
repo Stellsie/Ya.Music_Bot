@@ -37,33 +37,35 @@ def print_track_list(t_list):
     return message
 
 
-def search_for(ctx, query):
+def search_for(keyword, query):
     q = str(query)
-    q_keywords = ['track', 'album', 'artist', 'playlist', 'чарт', 'chart']
+    keyword = str(keyword)
     q_keyword = None
+    q_keywords = ['track', 'album', 'artist', 'playlist', 'chart', 'чарт', 'likes']
     for i in q_keywords:
-        if q.find(i) != -1:
-            if q_keyword is None:
-                q_keyword = i
-                q.replace(i, '')
-            else:
-                ctx.send('В запросе найдено больше одного типа, используется первый найденный')
-                q.replace(i, '')
+        if keyword.find(i) != -1:
+            q_keyword = i
+    if q_keyword is None:
+        q_keyword = 'all'
+        q = keyword + ' ' + q
     if q_keyword == 'чарт' or q_keyword == 'chart':
         return client.landing(blocks='chart')
-    elif q_keyword == 'track':
-        return client.search(text=q, type_=q_keyword).tracks.results
-    elif q_keyword == 'album':
-        return client.search(text=q, type_=q_keyword).albums.results
-    elif q_keyword == 'artist':
-        return client.search(text=q, type_=q_keyword).artists.results
-    elif q_keyword == 'playlist':
-        return client.search(text=q, type_=q_keyword).playlists.results
-    # not working now :(
-    # elif q_keyword == 'podcasts':
-    #     return client.search(text=q, type_=q_keyword).podcasts
-    else:  # if query type not specified, searching tracks
-        return client.search(text=q, type_='track').tracks.results
+    elif q_keyword == 'likes':
+        return client.users_likes_tracks(user_id=q)
+    search = client.search(text=q, type_=q_keyword)
+    if search is not None:
+        if q_keyword == 'track':
+            return search.tracks.results
+        elif q_keyword == 'album':
+            return search.albums.results
+        elif q_keyword == 'artist':
+            return search.artists.results
+        elif q_keyword == 'playlist':
+            return search.playlists.results
+        elif q_keyword == 'all':
+            return search.best.result
+    else:
+        return None
 
 
 class TracksQueue:
@@ -98,6 +100,9 @@ class TracksQueue:
             message += print_track_list(self.queue)
         return message
 
+    def clear(self):
+        self.queue.clear()
+
 
 tracks_queue = TracksQueue()
 
@@ -123,6 +128,23 @@ def get_artists(track):
     return artists
 
 
+async def play_queue(ctx):
+    while tracks_queue.empty():
+        await asyncio.sleep(1)
+        print('wait for tracks...')
+    while not tracks_queue.empty():
+        track = tracks_queue.get()
+        track_path = get_track_path(track)
+        track_name = track.title + ' - ' + get_artists(track)
+        source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(track_path))
+        ctx.voice_client.play(source, after=lambda e: print('Player error: %s' % e) if e else None)
+
+        message = await ctx.send('Сейчас играет: {}'.format(track_name))
+        while ctx.voice_client.is_playing():
+            await asyncio.sleep(1)
+        await message.delete()
+
+
 class Music(commands.Cog):
     def __init__(self, _bot):
         self.bot = _bot
@@ -138,7 +160,7 @@ class Music(commands.Cog):
     # async def search(self, ctx, *, query_type, query):
 
     @commands.command()
-    async def play(self, ctx, *, query=None):
+    async def play(self, ctx, keyword, *, query=None):
         if query is None:
             await ctx.send('Попытка продолжить воспроизведение из очереди...')
             if ctx.voice_client.is_playing():
@@ -146,28 +168,39 @@ class Music(commands.Cog):
             elif tracks_queue.empty():
                 await asyncio.sleep(3)  # делаем вид, что что-то делаем :D
                 await ctx.send('Очередь пуста!')
+            else:
+                await play_queue(ctx)
             await ctx.send('Чтобы добавить музыку в очередь, добавьте название '
                            'трека/плейлиста/альбома или имя испольнителя и укажите тип запроса — '
                            'track, album, playlist или artist (необязательно, по умолчанию track) и текст запроса.')
         else:
-            result = search_for(ctx, query)[0]
-            if type(result) == yandex_music.Track:
-                await ctx.send('Трек {} - {} добавлен в очередь'.format(result.title, get_artists(result)))
-                tracks_queue.put(result)
-            elif type(result) == yandex_music.Album:
-                await ctx.send('Альбом {} - {} добавлен в очередь'.format(result.title, get_artists(result)))
-                tracks_queue.put(client.albums_with_tracks(album_id=result.id).volumes[0])
-            elif type(result) == yandex_music.Playlist:
-                await ctx.send('Плейлист "{}" добавлен в очередь'.format(result.title))
-                tracks_queue.put(client.usersPlaylists(kind=result.kind, user_id=result.owner.uid)[0].tracks)
-            elif type(result) == yandex_music.Artist:
-                await ctx.send('10 популярных треков исполнителя {} добавлены в очередь'.format(result.name))
-                tracks_queue.put(result.get_tracks(page_size=10).tracks)
-            elif type(result) == yandex_music.Block:
-                await ctx.send('В очередь добавлены 10 первых треков чарта')
-                tracks_queue.put(result.entities)
-        while ctx.voice_client.is_playing():
-            await asyncio.sleep(1)
+            result = search_for(keyword, query)
+            if type(result) != yandex_music.TracksList:
+                result = result[0]
+            if result is not None:
+                if type(result) == yandex_music.Track:
+                    await ctx.send('Трек {} - {} добавлен в очередь'.format(result.title, get_artists(result)))
+                    tracks_queue.put(result)
+                elif type(result) == yandex_music.Album:
+                    await ctx.send('Альбом {} - {} добавлен в очередь'.format(result.title, get_artists(result)))
+                    tracks_queue.put(client.albums_with_tracks(album_id=result.id).volumes[0])
+                elif type(result) == yandex_music.Playlist:
+                    await ctx.send('Плейлист "{}" добавлен в очередь'.format(result.title))
+                    tracks_queue.put(client.usersPlaylists(kind=result.kind, user_id=result.owner.uid)[0].tracks)
+                elif type(result) == yandex_music.Artist:
+                    await ctx.send('10 популярных треков исполнителя {} добавлены в очередь'.format(result.name))
+                    tracks_queue.put(result.get_tracks(page_size=10).tracks)
+                elif type(result) == yandex_music.Block:
+                    await ctx.send('В очередь добавлены 10 первых треков чарта')
+                    tracks_queue.put(result.entities)
+                elif type(result) == yandex_music.TracksList:
+                    await ctx.send('В очередь добавлены понравившиеся треки')
+                    tracks_queue.put(result.tracks)
+                while ctx.voice_client.is_playing():
+                    await asyncio.sleep(1)
+                await play_queue(ctx)
+            else:
+                await ctx.send('Ничего не найдено :(')
 
     @commands.command()
     async def volume(self, ctx, volume: int):
@@ -181,7 +214,7 @@ class Music(commands.Cog):
         if ctx.voice_client.is_playing():
             ctx.voice_client.stop()
             await ctx.send(':next_track:')
-            await self.play_queue(ctx)
+            await play_queue(ctx)
 
         else:
             await ctx.send('Плеер не играет')
@@ -189,6 +222,11 @@ class Music(commands.Cog):
     @commands.command()
     async def queue(self, ctx):
         await ctx.send(tracks_queue.print_tracks())
+
+    @commands.command()
+    async def clear(self, ctx):
+        await ctx.send('Очередь воспроизведения очищена')
+        tracks_queue.clear()
 
     @commands.command()
     async def shuffle(self, ctx):
@@ -210,25 +248,6 @@ class Music(commands.Cog):
             else:
                 await ctx.send("Вы не подключены к голосовому каналу.")
                 raise commands.CommandError("Author not connected to a voice channel.")
-        elif ctx.voice_client.is_playing():
-            ctx.voice_client.stop()
-
-    @play.after_invoke
-    async def play_queue(self, ctx):
-        while tracks_queue.empty():
-            await asyncio.sleep(1)
-            print('wait for tracks...')
-        while not tracks_queue.empty():
-            track = tracks_queue.get()
-            track_path = get_track_path(track)
-            track_name = track.title + ' - ' + get_artists(track)
-            source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(track_path))
-            ctx.voice_client.play(source, after=lambda e: print('Player error: %s' % e) if e else None)
-
-            message = await ctx.send('Сейчас играет: {}'.format(track_name))
-            while ctx.voice_client.is_playing():
-                await asyncio.sleep(1)
-            await message.delete()
 
 
 bot = commands.Bot(command_prefix=commands.when_mentioned_or("m."),
@@ -239,6 +258,7 @@ bot = commands.Bot(command_prefix=commands.when_mentioned_or("m."),
 async def on_ready():
     print('Logged in as {0} ({0.id})'.format(bot.user))
     print('------')
+
 
 if cfg['YANDEX'].getboolean('use_token'):
     client = Client(cfg['YANDEX']['token'])
