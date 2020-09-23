@@ -63,7 +63,7 @@ def search_for(keyword, query):
         elif q_keyword == 'playlist':
             return search.playlists.results
         elif q_keyword == 'all':
-            return search.best.result
+            return search.best
     else:
         return None
 
@@ -160,8 +160,8 @@ class Music(commands.Cog):
     # async def search(self, ctx, *, query_type, query):
 
     @commands.command()
-    async def play(self, ctx, keyword, *, query=None):
-        if query is None:
+    async def play(self, ctx, keyword=None, *, query=None):
+        if keyword is None:
             await ctx.send('Попытка продолжить воспроизведение из очереди...')
             if ctx.voice_client.is_playing():
                 await ctx.send('Плеер уже играет!')
@@ -175,9 +175,11 @@ class Music(commands.Cog):
                            'track, album, playlist или artist (необязательно, по умолчанию track) и текст запроса.')
         else:
             result = search_for(keyword, query)
-            if type(result) != yandex_music.TracksList:
+            if type(result) != yandex_music.TracksList and type(result) != yandex_music.Best:
                 result = result[0]
             if result is not None:
+                if type(result) == yandex_music.Best:
+                    result = result.result
                 if type(result) == yandex_music.Track:
                     await ctx.send('Трек {} - {} добавлен в очередь'.format(result.title, get_artists(result)))
                     tracks_queue.put(result)
